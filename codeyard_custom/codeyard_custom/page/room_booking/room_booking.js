@@ -52,7 +52,8 @@ frappe.pages["room-booking"].on_page_load = function (wrapper) {
 
 	// Build the room color legend from whatever rooms are currently shown.
 	function renderLegend(roomColors) {
-		let el = page.main.querySelector("#room-legend");
+		// page.main is a jQuery object, so use getElementById on the document.
+		let el = document.getElementById("room-legend");
 		if (!el) return;
 		let items = Object.keys(roomColors)
 			.sort()
@@ -103,7 +104,11 @@ frappe.pages["room-booking"].on_page_load = function (wrapper) {
 
 		let calendarEl = document.getElementById("room-calendar");
 
-		let calendar = new frappe.FullCalendar.Calendar(calendarEl, {
+		// frappe.FullCalendar IS the Calendar class (bundle does
+		// `frappe.FullCalendar = Calendar`), so construct it directly — not
+		// `frappe.FullCalendar.Calendar`, which is how the CDN global build
+		// exposed it.
+		let calendar = new frappe.FullCalendar(calendarEl, {
 			// The bundled build does not auto-register plugins; pass them in.
 			plugins: frappe.FullCalendar.Plugins,
 			initialView: "timeGridWeek",
