@@ -27,54 +27,85 @@ frappe.pages["room-booking"].on_page_load = function (wrapper) {
 		},
 	});
 
-	// Room color mapping - add new rooms here as needed
-	const ROOM_COLORS = {
-		"3A": "#4F46E5",
-		"3B": "#f59e0b",
-	};
+	// Deterministic fallback color (only used if the server omits a color).
+	// The server (controller.set_color) is the source of truth for colors.
+	const ROOM_COLOR_PALETTE = [
+		"#4F46E5",
+		"#f59e0b",
+		"#10b981",
+		"#ef4444",
+		"#8b5cf6",
+		"#0ea5e9",
+		"#ec4899",
+		"#14b8a6",
+	];
 	const DEFAULT_COLOR = "#6366f1";
 
 	function getRoomColor(room) {
-		return ROOM_COLORS[room] || DEFAULT_COLOR;
+		if (!room) return DEFAULT_COLOR;
+		let h = 0;
+		for (let i = 0; i < room.length; i++) {
+			h = (h * 31 + room.charCodeAt(i)) >>> 0;
+		}
+		return ROOM_COLOR_PALETTE[h % ROOM_COLOR_PALETTE.length];
 	}
 
-	// Load FullCalendar from CDN (loaded once, cached by browser)
+	// Build the room color legend from whatever rooms are currently shown.
+	function renderLegend(roomColors) {
+		let el = page.main.querySelector("#room-legend");
+		if (!el) return;
+		let items = Object.keys(roomColors)
+			.sort()
+			.map(function (room) {
+				return (
+					'<div class="room-legend-item">' +
+					'<span class="room-legend-dot" style="background:' +
+					roomColors[room] +
+					'"></span>' +
+					"<span>Room " +
+					frappe.utils.escape_html(room) +
+					"</span>" +
+					"</div>"
+				);
+			});
+		el.innerHTML = items.join("");
+	}
+
+	// Use Frappe v16's bundled FullCalendar (no external CDN dependency).
 	function loadFullCalendar() {
 		return new Promise((resolve, reject) => {
-			if (window.FullCalendar) {
+			if (frappe.FullCalendar) {
 				resolve();
 				return;
 			}
-			let script = document.createElement("script");
-			script.src =
-				"https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js";
-			script.onload = resolve;
-			script.onerror = () =>
-				reject(new Error("Failed to load FullCalendar"));
-			document.head.appendChild(script);
+			frappe
+				.require("calendar.bundle.js")
+				.then(function () {
+					if (frappe.FullCalendar) {
+						resolve();
+					} else {
+						reject(
+							new Error(
+								"calendar.bundle.js loaded but frappe.FullCalendar is undefined"
+							)
+						);
+					}
+				})
+				.catch(reject);
 		});
 	}
 
 	function initCalendar() {
-		// Build room legend
-		let legendHtml = '<div class="room-legend">';
-		for (let [room, color] of Object.entries(ROOM_COLORS)) {
-			legendHtml +=
-				'<div class="room-legend-item">' +
-				'<span class="room-legend-dot" style="background:' +
-				color +
-				'"></span>' +
-				"<span>Room " +
-				room +
-				"</span>" +
-				"</div>";
-		}
-		legendHtml += "</div>";
-		$(page.main).html(legendHtml + '<div id="room-calendar"></div>');
+		$(page.main).html(
+			'<div class="room-legend" id="room-legend"></div>' +
+				'<div id="room-calendar"></div>'
+		);
 
 		let calendarEl = document.getElementById("room-calendar");
 
-		let calendar = new FullCalendar.Calendar(calendarEl, {
+		let calendar = new frappe.FullCalendar.Calendar(calendarEl, {
+			// The bundled build does not auto-register plugins; pass them in.
+			plugins: frappe.FullCalendar.Plugins,
 			initialView: "timeGridWeek",
 			headerToolbar: {
 				left: "prev,next today",
@@ -111,7 +142,10 @@ frappe.pages["room-booking"].on_page_load = function (wrapper) {
 						room: room,
 					},
 					callback: function (r) {
+						let roomColors = {};
 						let events = (r.message || []).map(function (b) {
+							let color = b.color || getRoomColor(b.room);
+							if (b.room) roomColors[b.room] = color;
 							return {
 								id: b.name,
 								title:
@@ -119,7 +153,7 @@ frappe.pages["room-booking"].on_page_load = function (wrapper) {
 									(b.purpose || "Booked"),
 								start: b.date + "T" + b.from_time,
 								end: b.date + "T" + b.to_time,
-								color: b.color || getRoomColor(b.room),
+								color: color,
 								extendedProps: {
 									room: b.room,
 									booked_by: b.booked_by,
@@ -129,6 +163,7 @@ frappe.pages["room-booking"].on_page_load = function (wrapper) {
 								},
 							};
 						});
+						renderLegend(roomColors);
 						successCallback(events);
 					},
 					error: function () {
@@ -292,29 +327,25 @@ frappe.pages["room-booking"].on_page_load = function (wrapper) {
 					props.status !== "Cancelled"
 				) {
 					dialog.set_primary_action("Cancel Booking", function () {
-						frappe.confirm(
-							"Cancel this booking?",
-							function () {
-								frappe.call({
-									method: "codeyard_custom.api.room_booking.cancel_booking",
-									args: { booking_name: booking_name },
-									callback: function (r) {
-										if (r.message) {
-											frappe.show_alert(
-												{
-													message:
-														"Booking cancelled",
-													indicator: "orange",
-												},
-												5
-											);
-											calendar.refetchEvents();
-											dialog.hide();
-										}
-									},
-								});
-							}
-						);
+						frappe.confirm("Cancel this booking?", function () {
+							frappe.call({
+								method: "codeyard_custom.api.room_booking.cancel_booking",
+								args: { booking_name: booking_name },
+								callback: function (r) {
+									if (r.message) {
+										frappe.show_alert(
+											{
+												message: "Booking cancelled",
+												indicator: "orange",
+											},
+											5
+										);
+										calendar.refetchEvents();
+										dialog.hide();
+									}
+								},
+							});
+						});
 					});
 					dialog.$wrapper
 						.find(".btn-primary")
