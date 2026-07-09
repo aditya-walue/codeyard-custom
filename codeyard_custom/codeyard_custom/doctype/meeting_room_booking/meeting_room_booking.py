@@ -28,10 +28,28 @@ DEFAULT_ROOM_COLOR = "#6366f1"
 
 class MeetingRoomBooking(Document):
     def validate(self):
+        self.validate_edit_permission()
         self.validate_times()
         self.check_overlap()
         self.set_datetime_fields()
         self.set_color()
+
+    def validate_edit_permission(self):
+        """Only the user who booked (booked_by) or System Manager can edit."""
+        if self.is_new():
+            return
+
+        user_roles = frappe.get_roles(frappe.session.user)
+        if "System Manager" in user_roles or "Meeting Room Admin" in user_roles:
+            return
+
+        if self.booked_by and frappe.session.user != self.booked_by:
+            frappe.throw(
+                _("Only the user who booked this room ({0}) can edit or cancel this booking").format(
+                    frappe.bold(self.booked_by)
+                ),
+                title=_("Not Allowed"),
+            )
 
     def validate_times(self):
         """Ensure from_time is strictly before to_time.

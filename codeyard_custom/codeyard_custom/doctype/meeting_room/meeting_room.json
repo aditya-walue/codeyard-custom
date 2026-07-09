@@ -40,9 +40,21 @@
    "write": 1
   },
   {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Meeting Room Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
    "read": 1,
    "select": 1,
-   "role": "Employee"
+   "role": "Meeting Room User"
   }
  ],
  "sort_field": "creation",
