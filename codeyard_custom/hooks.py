@@ -12,9 +12,7 @@ required_apps = ["frappe", "erpnext"]
 # app_include_js = []
 
 fixtures = [
-    {"dt": "Client Script"},
-    {"dt": "Server Script"},
-    {"dt": "Custom Field"}
+    {"dt": "Role"}
 ]
 
 # Scheduled Tasks
